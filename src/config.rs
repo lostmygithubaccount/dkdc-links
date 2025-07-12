@@ -34,11 +34,10 @@ pub fn config_path() -> Result<PathBuf> {
 
 pub fn init_config() -> Result<()> {
     let config_path = config_path()?;
-    let config_dir = config_path.parent().unwrap();
-
-    fs::create_dir_all(config_dir).context("Failed to create config directory")?;
 
     if !config_path.exists() {
+        let config_dir = config_path.parent().unwrap();
+        fs::create_dir_all(config_dir).context("Failed to create config directory")?;
         fs::write(&config_path, DEFAULT_CONFIG).context("Failed to write default config")?;
     }
 
@@ -71,23 +70,35 @@ pub fn config_it() -> Result<()> {
 }
 
 pub fn print_config(config: &Config) -> Result<()> {
-    let sections = vec![("aliases", &config.aliases), ("links", &config.links)];
-
-    for (section_name, section_data) in sections {
-        if section_data.is_empty() {
-            continue;
-        }
-
-        println!("{section_name}:");
+    if !config.aliases.is_empty() {
+        println!("aliases:");
         println!();
 
-        let mut keys: Vec<_> = section_data.keys().collect();
-        keys.sort();
+        let mut keys: Vec<_> = config.aliases.keys().collect();
+        keys.sort_unstable();
 
         let max_key_len = keys.iter().map(|k| k.len()).max().unwrap_or(0);
 
         for key in keys {
-            if let Some(value) = section_data.get(key) {
+            if let Some(value) = config.aliases.get(key) {
+                println!("• {key:<max_key_len$} | {value}");
+            }
+        }
+
+        println!();
+    }
+
+    if !config.links.is_empty() {
+        println!("links:");
+        println!();
+
+        let mut keys: Vec<_> = config.links.keys().collect();
+        keys.sort_unstable();
+
+        let max_key_len = keys.iter().map(|k| k.len()).max().unwrap_or(0);
+
+        for key in keys {
+            if let Some(value) = config.links.get(key) {
                 println!("• {key:<max_key_len$} | {value}");
             }
         }
