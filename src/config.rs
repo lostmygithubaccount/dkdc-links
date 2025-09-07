@@ -10,6 +10,8 @@ pub struct Config {
     pub aliases: HashMap<String, String>,
     #[serde(default)]
     pub links: HashMap<String, String>,
+    #[serde(default)]
+    pub groups: HashMap<String, Vec<String>>,
 }
 
 const DEFAULT_CONFIG: &str = r#"# dkdc-links config file
@@ -21,6 +23,8 @@ a2 = "link2"
 [links]
 link1 = "https://crates.io/crates/dkdc-links"
 link2 = "https://github.com/lostmygithubaccount/dkdc-links"
+[groups]
+dev = ["alias1", "alias2"]
 "#;
 
 pub fn config_path() -> Result<PathBuf> {
@@ -100,6 +104,25 @@ pub fn print_config(config: &Config) -> Result<()> {
         for key in keys {
             if let Some(value) = config.links.get(key) {
                 println!("• {key:<max_key_len$} | {value}");
+            }
+        }
+
+        println!();
+    }
+
+    if !config.groups.is_empty() {
+        println!("groups:");
+        println!();
+
+        let mut keys: Vec<_> = config.groups.keys().collect();
+        keys.sort_unstable();
+
+        let max_key_len = keys.iter().map(|k| k.len()).max().unwrap_or(0);
+
+        for key in keys {
+            if let Some(value) = config.groups.get(key) {
+                let items = value.join(", ");
+                println!("• {key:<max_key_len$} | [{items}]");
             }
         }
 

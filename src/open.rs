@@ -16,7 +16,7 @@ pub fn alias_or_link_to_uri(link: &str, config: &Config) -> Result<String> {
         return Ok(uri.clone());
     }
 
-    anyhow::bail!("'{}' not found in [links] or [aliases]", link)
+    anyhow::bail!("'{}' not found in [links], [aliases], or [groups]", link)
 }
 
 fn open_it(link: &str) -> Result<()> {
@@ -26,7 +26,20 @@ fn open_it(link: &str) -> Result<()> {
 }
 
 pub fn open_links(links: Vec<String>, config: &Config) -> Result<()> {
+    // First, expand any groups in the input
+    let mut expanded_links = Vec::new();
     for link in links {
+        if let Some(group_items) = config.groups.get(&link) {
+            // It's a group, add all items from the group
+            expanded_links.extend(group_items.clone());
+        } else {
+            // Not a group, add the item directly
+            expanded_links.push(link);
+        }
+    }
+
+    // Now process the expanded list
+    for link in expanded_links {
         match alias_or_link_to_uri(&link, config) {
             Ok(uri) => {
                 if let Err(e) = open_it(&uri) {
