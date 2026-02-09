@@ -1,0 +1,8 @@
+version = 1
+revision = 3
+requires-python = ">=3.11"
+
+[[package]]
+name = "dkdc-links"
+version = "1.4.1"
+source = { editable = "." }

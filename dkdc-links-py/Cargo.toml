@@ -1,0 +1,12 @@
+[package]
+name = "dkdc-links-py"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+dkdc-links = { workspace = true, features = ["gui"] }
+pyo3.workspace = true

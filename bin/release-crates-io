@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+echo "Publishing dkdc-links to crates.io..."
+cargo publish --manifest-path dkdc-links/Cargo.toml
+
+echo "Published!"

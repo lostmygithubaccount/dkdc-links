@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+echo "Installing dkdc-links CLI..."
+cargo install --path dkdc-links --force
+
+echo "Rust install complete!"

@@ -1,0 +1,30 @@
+[project]
+name = "dkdc-links"
+version = "1.4.1"
+description = "Bookmarks in your terminal"
+authors = [{ name = "Cody", email = "cody@dkdc.dev" }]
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+dkdc-links = "dkdc_links:main"
+
+[tool.maturin]
+module-name = "dkdc_links.core"
+python-packages = ["dkdc_links"]
+python-source = "src"
+manifest-path = "dkdc-links-py/Cargo.toml"
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "dkdc-links/**/*.rs" },
+    { file = "dkdc-links-py/**/*.rs" },
+    { file = "../Cargo.toml" },
+    { file = "../Cargo.lock" },
+]
