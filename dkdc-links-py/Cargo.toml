@@ -1,12 +1,16 @@
+[workspace]
+
 [package]
 name = "dkdc-links-py"
-version.workspace = true
-edition.workspace = true
+version = "2.0.0"
+edition = "2024"
+authors = ["Cody <cody@dkdc.dev>"]
+license = "MIT"
 
 [lib]
 name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-dkdc-links = { workspace = true, features = ["gui"] }
-pyo3.workspace = true
+dkdc-links = { path = "../dkdc-links", features = ["gui"] }
+pyo3 = { version = "0.28", features = ["extension-module", "abi3-py311"] }
