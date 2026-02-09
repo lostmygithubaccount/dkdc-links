@@ -1,6 +1,6 @@
 [project]
 name = "dkdc-links"
-version = "1.4.1"
+version = "2.0.0"
 description = "Bookmarks in your terminal"
 authors = [{ name = "Cody", email = "cody@dkdc.dev" }]
 requires-python = ">=3.11"
