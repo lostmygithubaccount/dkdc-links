@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -33,7 +34,36 @@ link2 = "https://github.com/lostmygithubaccount/dkdc-links"
 dev = ["alias1", "alias2"]
 "#;
 
+impl Config {
+    pub fn validate(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+
+        for (alias, target) in &self.aliases {
+            if !self.links.contains_key(target) {
+                warnings.push(format!(
+                    "alias '{alias}' points to '{target}' which is not in [links]"
+                ));
+            }
+        }
+
+        for (group, entries) in &self.groups {
+            for entry in entries {
+                if !self.aliases.contains_key(entry) && !self.links.contains_key(entry) {
+                    warnings.push(format!(
+                        "group '{group}' contains '{entry}' which is not in [aliases] or [links]"
+                    ));
+                }
+            }
+        }
+
+        warnings
+    }
+}
+
 pub fn config_path() -> Result<PathBuf> {
+    // Intentionally use ~/.config/ rather than dirs::config_dir(), which
+    // returns ~/Library/Application Support/ on macOS. We want a single
+    // consistent dotfile location across platforms.
     let home = dirs::home_dir().context("Failed to get home directory")?;
     Ok(home
         .join(CONFIG_DIR)
@@ -46,7 +76,9 @@ pub fn init_config() -> Result<()> {
     let config_path = config_path()?;
 
     if !config_path.exists() {
-        let config_dir = config_path.parent().unwrap();
+        let config_dir = config_path
+            .parent()
+            .context("Invalid config path: no parent directory")?;
         fs::create_dir_all(config_dir).context("Failed to create config directory")?;
         fs::write(&config_path, DEFAULT_CONFIG).context("Failed to write default config")?;
     }
@@ -58,6 +90,11 @@ pub fn load_config() -> Result<Config> {
     let config_path = config_path()?;
     let contents = fs::read_to_string(&config_path).context("Failed to read config file")?;
     let config: Config = toml::from_str(&contents).context("Failed to parse config file")?;
+
+    for warning in config.validate() {
+        eprintln!("[dkdc-links] warning: {warning}");
+    }
+
     Ok(config)
 }
 
@@ -79,10 +116,11 @@ pub fn edit_config() -> Result<()> {
     Ok(())
 }
 
-fn print_section<V, F>(name: &str, map: &HashMap<String, V>, format_value: F)
-where
-    F: Fn(&V) -> String,
-{
+fn print_section<V>(
+    name: &str,
+    map: &HashMap<String, V>,
+    format_value: impl Fn(&V) -> Cow<'_, str>,
+) {
     if map.is_empty() {
         return;
     }
@@ -90,24 +128,24 @@ where
     println!("{name}:");
     println!();
 
-    let mut keys: Vec<_> = map.keys().collect();
-    keys.sort_unstable();
+    let mut entries: Vec<_> = map.iter().collect();
+    entries.sort_unstable_by_key(|(k, _)| k.as_str());
 
-    let max_key_len = keys.iter().map(|k| k.len()).max().unwrap_or(0);
+    let max_key_len = entries.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
 
-    for key in keys {
-        if let Some(value) = map.get(key) {
-            println!("• {key:<max_key_len$} | {}", format_value(value));
-        }
+    for (key, value) in entries {
+        println!("• {key:<max_key_len$} | {}", format_value(value));
     }
 
     println!();
 }
 
 pub fn print_config(config: &Config) {
-    print_section("aliases", &config.aliases, |v| v.clone());
-    print_section("links", &config.links, |v| v.clone());
-    print_section("groups", &config.groups, |v| format!("[{}]", v.join(", ")));
+    print_section("aliases", &config.aliases, |v| Cow::Borrowed(v));
+    print_section("links", &config.links, |v| Cow::Borrowed(v));
+    print_section("groups", &config.groups, |v| {
+        Cow::Owned(format!("[{}]", v.join(", ")))
+    });
 }
 
 #[cfg(test)]
@@ -182,5 +220,41 @@ rust = "https://rust-lang.org"
         assert!(!config.aliases.is_empty());
         assert!(!config.links.is_empty());
         assert!(!config.groups.is_empty());
+    }
+
+    #[test]
+    fn test_valid_config_has_no_warnings() {
+        let config: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+        assert!(config.validate().is_empty());
+    }
+
+    #[test]
+    fn test_broken_alias_target_warns() {
+        let toml = r#"
+[aliases]
+broken = "nonexistent"
+
+[links]
+real = "https://example.com"
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        let warnings = config.validate();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("nonexistent"));
+    }
+
+    #[test]
+    fn test_broken_group_entry_warns() {
+        let toml = r#"
+[links]
+real = "https://example.com"
+
+[groups]
+dev = ["real", "ghost"]
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        let warnings = config.validate();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("ghost"));
     }
 }

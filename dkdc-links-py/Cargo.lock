@@ -803,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "dkdc-links"
-version = "2.0.1"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -816,7 +816,7 @@ dependencies = [
 
 [[package]]
 name = "dkdc-links-py"
-version = "2.0.1"
+version = "2.1.0"
 dependencies = [
  "dkdc-links",
  "pyo3",

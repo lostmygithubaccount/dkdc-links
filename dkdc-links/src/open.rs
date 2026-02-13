@@ -2,21 +2,22 @@ use anyhow::{Context, Result};
 
 use crate::config::Config;
 
-pub fn alias_or_link_to_uri(link: &str, config: &Config) -> Result<String> {
-    // Check if it's an alias first
+pub fn resolve_uri<'a>(link: &str, config: &'a Config) -> Result<&'a str> {
     if let Some(alias_target) = config.aliases.get(link) {
-        // Alias exists - its target MUST be in links
-        return config.links.get(alias_target).cloned().with_context(|| {
-            format!("alias '{link}' points to '{alias_target}' which is not in [links]")
-        });
+        return config
+            .links
+            .get(alias_target)
+            .map(String::as_str)
+            .with_context(|| {
+                format!("alias '{link}' points to '{alias_target}' which is not in [links]")
+            });
     }
 
-    // Check if it's directly in links
-    if let Some(uri) = config.links.get(link) {
-        return Ok(uri.clone());
-    }
-
-    anyhow::bail!("'{}' not found in [aliases] or [links]", link)
+    config
+        .links
+        .get(link)
+        .map(String::as_str)
+        .with_context(|| format!("'{link}' not found in [aliases] or [links]"))
 }
 
 fn open_it(link: &str) -> Result<()> {
@@ -25,13 +26,13 @@ fn open_it(link: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn expand_groups(links: &[String], config: &Config) -> Vec<String> {
+pub fn expand_groups<'a>(links: &'a [String], config: &'a Config) -> Vec<&'a str> {
     let mut expanded = Vec::new();
     for link in links {
-        if let Some(group_items) = config.groups.get(link) {
-            expanded.extend(group_items.clone());
+        if let Some(group_items) = config.groups.get(link.as_str()) {
+            expanded.extend(group_items.iter().map(|s| s.as_str()));
         } else {
-            expanded.push(link.clone());
+            expanded.push(link.as_str());
         }
     }
     expanded
@@ -41,9 +42,9 @@ pub fn open_links(links: &[String], config: &Config) -> Result<()> {
     let expanded_links = expand_groups(links, config);
 
     for link in expanded_links {
-        match alias_or_link_to_uri(&link, config) {
+        match resolve_uri(link, config) {
             Ok(uri) => {
-                if let Err(e) = open_it(&uri) {
+                if let Err(e) = open_it(uri) {
                     eprintln!("[dkdc] failed to open {link}: {e}");
                 }
             }
@@ -87,14 +88,14 @@ mod tests {
     #[test]
     fn test_alias_resolves_to_uri() {
         let config = test_config();
-        let uri = alias_or_link_to_uri("gh", &config).unwrap();
+        let uri = resolve_uri("gh", &config).unwrap();
         assert_eq!(uri, "https://github.com");
     }
 
     #[test]
     fn test_link_resolves_to_uri() {
         let config = test_config();
-        let uri = alias_or_link_to_uri("rust", &config).unwrap();
+        let uri = resolve_uri("rust", &config).unwrap();
         assert_eq!(uri, "https://rust-lang.org");
     }
 
@@ -102,14 +103,14 @@ mod tests {
     fn test_alias_target_as_link_resolves() {
         let config = test_config();
         // "github" is both an alias target and a link name
-        let uri = alias_or_link_to_uri("github", &config).unwrap();
+        let uri = resolve_uri("github", &config).unwrap();
         assert_eq!(uri, "https://github.com");
     }
 
     #[test]
     fn test_unknown_link_errors() {
         let config = test_config();
-        let result = alias_or_link_to_uri("unknown", &config);
+        let result = resolve_uri("unknown", &config);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -121,7 +122,7 @@ mod tests {
             .aliases
             .insert("broken".to_string(), "nonexistent".to_string());
 
-        let result = alias_or_link_to_uri("broken", &config);
+        let result = resolve_uri("broken", &config);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("broken"));
