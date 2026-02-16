@@ -1,8 +1,15 @@
 pub mod cli;
 pub mod config;
-#[cfg(feature = "gui")]
-pub mod gui;
 pub mod open;
+pub mod storage;
+pub mod toml_storage;
 
-// Re-export run from cli module for convenience
+#[cfg(feature = "app")]
+pub mod app;
+#[cfg(feature = "webapp")]
+pub mod webapp;
+
 pub use cli::run;
+pub use config::Config;
+pub use storage::Storage;
+pub use toml_storage::TomlStorage;

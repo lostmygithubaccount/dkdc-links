@@ -3,6 +3,6 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 echo "Installing dkdc-links CLI..."
-cargo install --path dkdc-links --force
+cargo install --path dkdc-links --features webapp --force
 
 echo "Rust install complete!"

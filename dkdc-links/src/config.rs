@@ -2,14 +2,9 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 const DEFAULT_EDITOR: &str = "vi";
-const CONFIG_DIR: &str = ".config";
-const APP_NAME: &str = "dkdc";
-const APP_SUBDIR: &str = "links";
-const CONFIG_FILENAME: &str = "config.toml";
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -21,7 +16,7 @@ pub struct Config {
     pub groups: HashMap<String, Vec<String>>,
 }
 
-const DEFAULT_CONFIG: &str = r#"# dkdc-links config file
+pub const DEFAULT_CONFIG: &str = r#"# dkdc-links config file
 [aliases]
 alias1 = "link1"
 a1 = "link1"
@@ -58,54 +53,53 @@ impl Config {
 
         warnings
     }
-}
 
-pub fn config_path() -> Result<PathBuf> {
-    // Intentionally use ~/.config/ rather than dirs::config_dir(), which
-    // returns ~/Library/Application Support/ on macOS. We want a single
-    // consistent dotfile location across platforms.
-    let home = dirs::home_dir().context("Failed to get home directory")?;
-    Ok(home
-        .join(CONFIG_DIR)
-        .join(APP_NAME)
-        .join(APP_SUBDIR)
-        .join(CONFIG_FILENAME))
-}
+    /// Rename a link key and cascade to all aliases that target it.
+    pub fn rename_link(&mut self, old: &str, new: &str) -> Result<()> {
+        let url = self
+            .links
+            .remove(old)
+            .with_context(|| format!("link '{old}' not found"))?;
+        self.links.insert(new.to_string(), url);
 
-pub fn init_config() -> Result<()> {
-    let config_path = config_path()?;
+        // Update aliases that point to the old name
+        for target in self.aliases.values_mut() {
+            if target == old {
+                *target = new.to_string();
+            }
+        }
 
-    if !config_path.exists() {
-        let config_dir = config_path
-            .parent()
-            .context("Invalid config path: no parent directory")?;
-        fs::create_dir_all(config_dir).context("Failed to create config directory")?;
-        fs::write(&config_path, DEFAULT_CONFIG).context("Failed to write default config")?;
+        Ok(())
     }
 
-    Ok(())
-}
+    /// Rename an alias key and cascade to all groups that reference it.
+    pub fn rename_alias(&mut self, old: &str, new: &str) -> Result<()> {
+        let target = self
+            .aliases
+            .remove(old)
+            .with_context(|| format!("alias '{old}' not found"))?;
+        self.aliases.insert(new.to_string(), target);
 
-pub fn load_config() -> Result<Config> {
-    let config_path = config_path()?;
-    let contents = fs::read_to_string(&config_path).context("Failed to read config file")?;
-    let config: Config = toml::from_str(&contents).context("Failed to parse config file")?;
+        // Update group entries that reference the old name
+        for entries in self.groups.values_mut() {
+            for entry in entries.iter_mut() {
+                if entry == old {
+                    *entry = new.to_string();
+                }
+            }
+        }
 
-    for warning in config.validate() {
-        eprintln!("[dkdc-links] warning: {warning}");
+        Ok(())
     }
-
-    Ok(config)
 }
 
-pub fn edit_config() -> Result<()> {
-    let config_path = config_path()?;
+pub fn edit_config(config_path: &Path) -> Result<()> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| DEFAULT_EDITOR.to_string());
 
     println!("Opening {} with {}...", config_path.display(), editor);
 
     let status = std::process::Command::new(&editor)
-        .arg(&config_path)
+        .arg(config_path)
         .status()
         .with_context(|| format!("Editor {editor} not found in PATH"))?;
 
@@ -241,6 +235,62 @@ real = "https://example.com"
         let warnings = config.validate();
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("nonexistent"));
+    }
+
+    #[test]
+    fn test_rename_link_cascades_aliases() {
+        let toml = r#"
+[aliases]
+gh = "github"
+g = "github"
+
+[links]
+github = "https://github.com"
+"#;
+        let mut config: Config = toml::from_str(toml).unwrap();
+        config.rename_link("github", "gh-link").unwrap();
+        assert!(config.links.contains_key("gh-link"));
+        assert!(!config.links.contains_key("github"));
+        assert_eq!(config.aliases.get("gh"), Some(&"gh-link".to_string()));
+        assert_eq!(config.aliases.get("g"), Some(&"gh-link".to_string()));
+    }
+
+    #[test]
+    fn test_rename_alias_cascades_groups() {
+        let toml = r#"
+[aliases]
+gh = "github"
+
+[links]
+github = "https://github.com"
+
+[groups]
+dev = ["gh"]
+all = ["gh", "other"]
+"#;
+        let mut config: Config = toml::from_str(toml).unwrap();
+        config.rename_alias("gh", "github-alias").unwrap();
+        assert!(config.aliases.contains_key("github-alias"));
+        assert!(!config.aliases.contains_key("gh"));
+        assert_eq!(
+            config.groups.get("dev"),
+            Some(&vec!["github-alias".to_string()])
+        );
+        let all = config.groups.get("all").unwrap();
+        assert!(all.contains(&"github-alias".to_string()));
+        assert!(all.contains(&"other".to_string()));
+    }
+
+    #[test]
+    fn test_rename_nonexistent_link_errors() {
+        let mut config = Config::default();
+        assert!(config.rename_link("nope", "new").is_err());
+    }
+
+    #[test]
+    fn test_rename_nonexistent_alias_errors() {
+        let mut config = Config::default();
+        assert!(config.rename_alias("nope", "new").is_err());
     }
 
     #[test]

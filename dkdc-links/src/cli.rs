@@ -1,8 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
 
-use crate::config::{edit_config, init_config, load_config, print_config};
+use crate::config::{edit_config, print_config};
 use crate::open::open_links;
+use crate::storage::Storage;
+use crate::toml_storage::TomlStorage;
 
 #[derive(Parser, Debug)]
 #[command(name = "dkdc-links")]
@@ -13,10 +15,15 @@ pub struct Args {
     #[arg(short, long)]
     pub config: bool,
 
-    /// Open the graphical interface
-    #[cfg(feature = "gui")]
-    #[arg(long)]
-    pub gui: bool,
+    /// Open the desktop app
+    #[cfg(feature = "app")]
+    #[arg(short = 'a', long)]
+    pub app: bool,
+
+    /// Open the webapp
+    #[cfg(feature = "webapp")]
+    #[arg(short = 'w', long)]
+    pub webapp: bool,
 
     /// Things to open
     pub links: Vec<String>,
@@ -29,19 +36,28 @@ where
 {
     let args = Args::parse_from(args);
 
-    #[cfg(feature = "gui")]
-    if args.gui {
-        return crate::gui::run().map_err(|e| anyhow::anyhow!("{e}"));
+    #[cfg(feature = "app")]
+    if args.app {
+        return crate::app::run().map_err(|e| anyhow::anyhow!("{e}"));
     }
 
-    init_config()?;
+    let storage = TomlStorage::with_default_path()?;
+
+    #[cfg(feature = "webapp")]
+    if args.webapp {
+        storage.init()?;
+        return crate::webapp::run(Box::new(storage));
+    }
+    storage.init()?;
 
     if args.config {
-        edit_config()?;
+        if let Some(path) = storage.path() {
+            edit_config(path)?;
+        }
         return Ok(());
     }
 
-    let config = load_config()?;
+    let config = storage.load()?;
 
     if args.links.is_empty() {
         print_config(&config);

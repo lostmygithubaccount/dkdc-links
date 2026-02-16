@@ -2,7 +2,7 @@
 
 [package]
 name = "dkdc-links-py"
-version = "2.1.0"
+version = "3.1.0"
 edition = "2024"
 authors = ["Cody <cody@dkdc.dev>"]
 license = "MIT"
@@ -12,5 +12,5 @@ name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-dkdc-links = { path = "../dkdc-links", features = ["gui"] }
+dkdc-links = { path = "../dkdc-links", features = ["app", "webapp"] }
 pyo3 = { version = "0.28", features = ["extension-module", "abi3-py311"] }

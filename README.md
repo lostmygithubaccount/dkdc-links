@@ -1,4 +1,4 @@
-# Bookmarks CLI
+# Bookmarks
 
 Bookmarks in your terminal.
 
@@ -19,7 +19,7 @@ uv tool install dkdc-links
 cargo:
 
 ```bash
-cargo install dkdc-links
+cargo install dkdc-links --features app,webapp
 ```
 
 You can use `uvx` to run it without installing:
@@ -52,7 +52,8 @@ dkdc-links dev
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--config` | `-c` | Open config file in editor |
-| `--gui` | | Open graphical interface (under construction) |
+| `--app` | `-a` | Open desktop app (requires `app` feature; under construction) |
+| `--webapp` | `-w` | Open the webapp (requires `webapp` feature) |
 | `--help` | `-h` | Print help |
 | `--version` | `-V` | Print version |
 

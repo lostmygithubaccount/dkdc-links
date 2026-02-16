@@ -1,0 +1,159 @@
+use anyhow::{Context, Result};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use crate::config::{Config, DEFAULT_CONFIG};
+use crate::storage::Storage;
+
+const CONFIG_DIR: &str = ".config";
+const APP_NAME: &str = "dkdc";
+const APP_SUBDIR: &str = "links";
+const CONFIG_FILENAME: &str = "config.toml";
+
+pub struct TomlStorage {
+    path: PathBuf,
+}
+
+impl TomlStorage {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    /// Default config path: ~/.config/dkdc/links/config.toml
+    pub fn default_path() -> Result<PathBuf> {
+        // Intentionally use ~/.config/ rather than dirs::config_dir(), which
+        // returns ~/Library/Application Support/ on macOS. We want a single
+        // consistent dotfile location across platforms.
+        let home = dirs::home_dir().context("Failed to get home directory")?;
+        Ok(home
+            .join(CONFIG_DIR)
+            .join(APP_NAME)
+            .join(APP_SUBDIR)
+            .join(CONFIG_FILENAME))
+    }
+
+    pub fn with_default_path() -> Result<Self> {
+        Ok(Self::new(Self::default_path()?))
+    }
+}
+
+impl Storage for TomlStorage {
+    fn load(&self) -> Result<Config> {
+        let contents = fs::read_to_string(&self.path).context("Failed to read config file")?;
+        let config: Config = toml::from_str(&contents).context("Failed to parse config file")?;
+
+        for warning in config.validate() {
+            eprintln!("[dkdc-links] warning: {warning}");
+        }
+
+        Ok(config)
+    }
+
+    fn save(&self, config: &Config) -> Result<()> {
+        let contents = toml::to_string(config).context("Failed to serialize config")?;
+        fs::write(&self.path, contents).context("Failed to write config file")?;
+        Ok(())
+    }
+
+    fn init(&self) -> Result<()> {
+        if !self.path.exists() {
+            let config_dir = self
+                .path
+                .parent()
+                .context("Invalid config path: no parent directory")?;
+            fs::create_dir_all(config_dir).context("Failed to create config directory")?;
+            fs::write(&self.path, DEFAULT_CONFIG).context("Failed to write default config")?;
+        }
+        Ok(())
+    }
+
+    fn backend_name(&self) -> &str {
+        "toml"
+    }
+
+    fn path(&self) -> Option<&Path> {
+        Some(&self.path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn test_default_path() {
+        let path = TomlStorage::default_path().unwrap();
+        assert!(path.ends_with(".config/dkdc/links/config.toml"));
+    }
+
+    #[test]
+    fn test_load_save_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let storage = TomlStorage::new(path.clone());
+
+        // Write a config manually
+        let mut f = fs::File::create(&path).unwrap();
+        writeln!(
+            f,
+            r#"[aliases]
+gh = "github"
+
+[links]
+github = "https://github.com"
+
+[groups]
+dev = ["gh"]
+"#
+        )
+        .unwrap();
+
+        let config = storage.load().unwrap();
+        assert_eq!(config.aliases.get("gh"), Some(&"github".to_string()));
+
+        // Save and reload
+        storage.save(&config).unwrap();
+        let reloaded = storage.load().unwrap();
+        assert_eq!(config.aliases, reloaded.aliases);
+        assert_eq!(config.links, reloaded.links);
+        assert_eq!(config.groups, reloaded.groups);
+    }
+
+    #[test]
+    fn test_init_creates_default_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sub").join("config.toml");
+
+        let storage = TomlStorage::new(path.clone());
+        storage.init().unwrap();
+
+        assert!(path.exists());
+        let config = storage.load().unwrap();
+        assert!(!config.links.is_empty());
+    }
+
+    #[test]
+    fn test_init_does_not_overwrite() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        fs::write(&path, "[links]\nrust = \"https://rust-lang.org\"\n").unwrap();
+
+        let storage = TomlStorage::new(path);
+        storage.init().unwrap();
+
+        let config = storage.load().unwrap();
+        assert_eq!(
+            config.links.get("rust"),
+            Some(&"https://rust-lang.org".to_string())
+        );
+    }
+
+    #[test]
+    fn test_backend_name() {
+        let storage = TomlStorage::new(PathBuf::from("/tmp/test.toml"));
+        assert_eq!(storage.backend_name(), "toml");
+    }
+}

@@ -1,4 +1,4 @@
-//! Graphical interface for dkdc-links
+//! Desktop app for dkdc-links
 
 use iced::widget::{center, column, container, text};
 use iced::{Element, Theme};
