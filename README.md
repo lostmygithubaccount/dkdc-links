@@ -52,8 +52,8 @@ dkdc-links dev
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--config` | `-c` | Open config file in editor |
-| `--app` | `-a` | Open desktop app (requires `app` feature; under construction) |
-| `--webapp` | `-w` | Open the webapp (requires `webapp` feature) |
+| `--app` | `-a` | Open desktop app (iced GUI, requires `app` feature) |
+| `--webapp` | `-w` | Open the webapp on localhost:1414 (requires `webapp` feature) |
 | `--help` | `-h` | Print help |
 | `--version` | `-V` | Print version |
 

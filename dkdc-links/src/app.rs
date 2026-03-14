@@ -9,6 +9,7 @@ use std::collections::HashSet;
 
 use crate::config::Config;
 use crate::storage::Storage;
+use crate::strings;
 
 // -- Colors ------------------------------------------------------------------
 
@@ -259,8 +260,7 @@ impl Links {
                 let target = self.add_alias_target.trim().to_string();
                 if !alias.is_empty() && !target.is_empty() {
                     if !self.config.links.contains_key(&target) {
-                        self.error =
-                            Some(format!("alias target '{target}' does not exist in links"));
+                        self.error = Some(strings::err_alias_target_missing(&target));
                     } else {
                         self.config.aliases.insert(alias, target);
                         self.save();
@@ -290,8 +290,7 @@ impl Links {
                         .map(String::as_str)
                         .collect();
                     if !missing.is_empty() {
-                        self.error =
-                            Some(format!("group entries not found: {}", missing.join(", ")));
+                        self.error = Some(strings::err_group_entries_missing(&missing));
                     } else {
                         self.config.groups.insert(name, entries);
                         self.save();
@@ -477,7 +476,7 @@ impl Links {
             }
             (ItemKind::Alias, "value") => {
                 if !self.config.links.contains_key(value) {
-                    self.error = Some(format!("alias target '{value}' does not exist in links"));
+                    self.error = Some(strings::err_alias_target_missing(value));
                     return;
                 }
                 if let Some(target) = self.config.aliases.get_mut(name) {
@@ -506,7 +505,7 @@ impl Links {
                     .map(String::as_str)
                     .collect();
                 if !missing.is_empty() {
-                    self.error = Some(format!("group entries not found: {}", missing.join(", ")));
+                    self.error = Some(strings::err_group_entries_missing(&missing));
                     return;
                 }
                 if let Some(existing) = self.config.groups.get_mut(name) {
@@ -559,7 +558,7 @@ impl Links {
                     iced::widget::span("dkdc-links")
                         .size(13)
                         .color(colors::PURPLE)
-                        .link("https://dkdc.io/links/".to_string()),
+                        .link(strings::PROJECT_URL.to_string()),
                     iced::widget::span(": bookmarks in your ")
                         .size(13)
                         .color(colors::TEXT_DIM),
@@ -637,7 +636,7 @@ impl Links {
     }
 
     fn view_toolbar(&self) -> Element<'_, Message> {
-        let search = text_input("filter...", &self.search)
+        let search = text_input(strings::PH_FILTER, &self.search)
             .on_input(Message::SearchChanged)
             .size(13)
             .width(200)
@@ -727,13 +726,13 @@ impl Links {
 
     fn view_add_forms(&self) -> Element<'_, Message> {
         let link_form = row![
-            text_input("link name", &self.add_link_name)
+            text_input(strings::PH_LINK_NAME, &self.add_link_name)
                 .on_input(Message::AddLinkName)
                 .on_submit(Message::SubmitLink)
                 .size(13)
                 .width(Length::FillPortion(2))
                 .style(|_, status| input_style(status)),
-            text_input("https://...", &self.add_link_url)
+            text_input(strings::PH_LINK_URL, &self.add_link_url)
                 .on_input(Message::AddLinkUrl)
                 .on_submit(Message::SubmitLink)
                 .size(13)
@@ -749,13 +748,13 @@ impl Links {
         .align_y(iced::Alignment::Center);
 
         let alias_form = row![
-            text_input("alias", &self.add_alias_name)
+            text_input(strings::PH_ALIAS_NAME, &self.add_alias_name)
                 .on_input(Message::AddAliasName)
                 .on_submit(Message::SubmitAlias)
                 .size(13)
                 .width(Length::FillPortion(2))
                 .style(|_, status| input_style(status)),
-            text_input("link name", &self.add_alias_target)
+            text_input(strings::PH_ALIAS_TARGET, &self.add_alias_target)
                 .on_input(Message::AddAliasTarget)
                 .on_submit(Message::SubmitAlias)
                 .size(13)
@@ -771,13 +770,13 @@ impl Links {
         .align_y(iced::Alignment::Center);
 
         let group_form = row![
-            text_input("group name", &self.add_group_name)
+            text_input(strings::PH_GROUP_NAME, &self.add_group_name)
                 .on_input(Message::AddGroupName)
                 .on_submit(Message::SubmitGroup)
                 .size(13)
                 .width(Length::FillPortion(2))
                 .style(|_, status| input_style(status)),
-            text_input("link1, alias2, ...", &self.add_group_entries)
+            text_input(strings::PH_GROUP_ENTRIES, &self.add_group_entries)
                 .on_input(Message::AddGroupEntries)
                 .on_submit(Message::SubmitGroup)
                 .size(13)

@@ -7,13 +7,14 @@ codegen-units = 1
 
 [package]
 name = "dkdc-links"
-version = "4.1.1"
+version = "4.1.2"
 edition = "2021"
 authors = ["Cody <cody@dkdc.dev>"]
 description = "Bookmarks in your terminal"
 repository = "https://github.com/lostmygithubaccount/dkdc-links"
 homepage = "https://github.com/lostmygithubaccount/dkdc-links"
 license = "MIT"
+readme = "../README.md"
 
 [lib]
 name = "dkdc_links"

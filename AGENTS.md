@@ -24,10 +24,12 @@ bin/bump-version   # Bump version (--patch, --minor (default), --major)
 dkdc-links/        # Core Rust crate (standalone, not in monorepo workspace)
   src/lib.rs       # Library root
   src/main.rs      # Binary entry point
-  src/cli.rs       # CLI (clap), optional `gui` subcommand
+  src/cli.rs       # CLI (clap) with --app and --webapp flags
   src/config.rs    # Config loading/saving (~/.config/dkdc/links/config.toml)
   src/open.rs      # Link resolution (alias → link → URI)
-  src/gui.rs       # iced GUI (behind `gui` feature flag)
+  src/app.rs       # iced desktop app (behind `app` feature flag)
+  src/webapp.rs    # Axum HTMX webapp on port 1414 (behind `webapp` feature flag)
+  assets/icon.png  # App window icon
 dkdc-links-py/     # PyO3 bindings (cdylib)
 src/dkdc_links/    # Python wrapper + type stubs (core.pyi, py.typed)
 ```

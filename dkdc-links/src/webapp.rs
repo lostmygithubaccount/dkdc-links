@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::config::Config;
 use crate::storage::Storage;
+use crate::strings;
 
 struct AppState {
     storage: Mutex<Box<dyn Storage>>,
@@ -34,6 +35,7 @@ fn escape(s: &str) -> String {
 // -- HTML rendering ----------------------------------------------------------
 
 fn page(body: &str) -> String {
+    let project_url = strings::PROJECT_URL;
     format!(
         r##"<!DOCTYPE html>
 <html lang="en">
@@ -131,7 +133,7 @@ fn page(body: &str) -> String {
 </head>
 <body>
   <h1>Bookmarks</h1>
-  <p class="subtitle"><a href="https://dkdc.io/links/" target="_blank" rel="noopener">dkdc-links</a>: bookmarks in your <s>terminal</s> browser</p>
+  <p class="subtitle"><a href="{project_url}" target="_blank" rel="noopener">dkdc-links</a>: bookmarks in your <s>terminal</s> browser</p>
   <div id="content">
     {body}
   </div>
@@ -483,7 +485,7 @@ fn render_content(config: &Config, sort: SortField, error: Option<&str>) -> Stri
     // Toolbar: search + tab filter
     html.push_str(&format!(
         r##"<div class="toolbar">
-  <input id="search" type="text" placeholder="filter..." oninput="filterRows()" autocomplete="off">
+  <input id="search" type="text" placeholder="{ph_filter}" oninput="filterRows()" autocomplete="off">
   <div class="tabs">
     <button id="tab-all" class="tab active" onclick="showTab('all')">all</button>
     <button id="tab-links" class="tab" onclick="showTab('links')">links<span class="counts">{lc}</span></button>
@@ -491,6 +493,7 @@ fn render_content(config: &Config, sort: SortField, error: Option<&str>) -> Stri
     <button id="tab-groups" class="tab" onclick="showTab('groups')">groups<span class="counts">{gc}</span></button>
   </div>
 </div>"##,
+        ph_filter = strings::PH_FILTER,
         lc = links.len(),
         ac = aliases.len(),
         gc = groups.len(),
@@ -514,25 +517,31 @@ fn render_content(config: &Config, sort: SortField, error: Option<&str>) -> Stri
     );
 
     // Add forms at the top
-    html.push_str(
+    html.push_str(&format!(
         r##"<div class="section">
 <form class="inline" hx-post="/add/link" hx-target="#content">
-  <input name="name" placeholder="link name" required>
-  <input name="url" placeholder="https://..." required>
+  <input name="name" placeholder="{ph_link_name}" required>
+  <input name="url" placeholder="{ph_link_url}" required>
   <button class="btn btn-add" type="submit">+ link</button>
 </form>
 <form class="inline" hx-post="/add/alias" hx-target="#content">
-  <input name="alias" placeholder="alias" required>
-  <input name="target" placeholder="link name" required>
+  <input name="alias" placeholder="{ph_alias_name}" required>
+  <input name="target" placeholder="{ph_alias_target}" required>
   <button class="btn btn-add" type="submit">+ alias</button>
 </form>
 <form class="inline" hx-post="/add/group" hx-target="#content">
-  <input name="name" placeholder="group name" required>
-  <input name="entries" placeholder="link1, alias2, ..." required>
+  <input name="name" placeholder="{ph_group_name}" required>
+  <input name="entries" placeholder="{ph_group_entries}" required>
   <button class="btn btn-add" type="submit">+ group</button>
 </form>
 </div>"##,
-    );
+        ph_link_name = strings::PH_LINK_NAME,
+        ph_link_url = strings::PH_LINK_URL,
+        ph_alias_name = strings::PH_ALIAS_NAME,
+        ph_alias_target = strings::PH_ALIAS_TARGET,
+        ph_group_name = strings::PH_GROUP_NAME,
+        ph_group_entries = strings::PH_GROUP_ENTRIES,
+    ));
 
     // Links section
     html.push_str(r##"<div class="section" id="section-links"><h2>links</h2>"##);
@@ -641,10 +650,7 @@ async fn add_alias(State(state): S, axum::extract::Form(form): Form) -> Html<Str
     if !alias.is_empty() && !target.is_empty() {
         let config = state.load_config();
         if !config.links.contains_key(&target) {
-            return content_err(
-                &state,
-                &format!("alias target '{target}' does not exist in links"),
-            );
+            return content_err(&state, &strings::err_alias_target_missing(&target));
         }
         let mut config = config;
         config.aliases.insert(alias, target);
@@ -673,10 +679,7 @@ async fn add_group(State(state): S, axum::extract::Form(form): Form) -> Html<Str
                 .map(String::as_str)
                 .collect();
             if !missing.is_empty() {
-                return content_err(
-                    &state,
-                    &format!("group entries not found: {}", missing.join(", ")),
-                );
+                return content_err(&state, &strings::err_group_entries_missing(&missing));
             }
             let mut config = config;
             config.groups.insert(name, entries);
@@ -747,10 +750,7 @@ async fn edit_alias(
 
     if let Some(new_target) = new_target {
         if !config.links.contains_key(new_target) {
-            return content_err(
-                &state,
-                &format!("alias target '{new_target}' does not exist in links"),
-            );
+            return content_err(&state, &strings::err_alias_target_missing(new_target));
         }
         if let Some(target) = config.aliases.get_mut(&name) {
             *target = new_target.clone();
@@ -792,10 +792,7 @@ async fn edit_group(
             .map(String::as_str)
             .collect();
         if !missing.is_empty() {
-            return content_err(
-                &state,
-                &format!("group entries not found: {}", missing.join(", ")),
-            );
+            return content_err(&state, &strings::err_group_entries_missing(&missing));
         }
         if let Some(existing) = config.groups.get_mut(&name) {
             *existing = entries;

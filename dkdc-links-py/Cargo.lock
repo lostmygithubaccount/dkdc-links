@@ -855,7 +855,7 @@ dependencies = [
 
 [[package]]
 name = "dkdc-links"
-version = "4.1.1"
+version = "4.1.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -871,7 +871,7 @@ dependencies = [
 
 [[package]]
 name = "dkdc-links-py"
-version = "4.1.1"
+version = "4.1.2"
 dependencies = [
  "dkdc-links",
  "pyo3",

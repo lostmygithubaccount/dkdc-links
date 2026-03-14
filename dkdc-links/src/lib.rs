@@ -2,6 +2,7 @@ pub mod cli;
 pub mod config;
 pub mod open;
 pub mod storage;
+pub mod strings;
 pub mod toml_storage;
 
 #[cfg(feature = "app")]
