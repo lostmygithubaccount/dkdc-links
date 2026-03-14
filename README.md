@@ -34,32 +34,7 @@ uvx dkdc-links
 dkdc-links [OPTIONS] [LINKS]...
 ```
 
-Open links by name or alias:
-
-```bash
-# Open a link
-dkdc-links link1
-
-# Open multiple links
-dkdc-links link1 link2
-
-# Open a group
-dkdc-links dev
-```
-
-### Options
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--config` | `-c` | Open config file in editor |
-| `--app` | `-a` | Open desktop app (iced GUI, requires `app` feature) |
-| `--webapp` | `-w` | Open the webapp on localhost:1414 (requires `webapp` feature) |
-| `--help` | `-h` | Print help |
-| `--version` | `-V` | Print version |
-
-## Configuration
-
-Config lives at `~/.config/dkdc/links/config.toml`. Run `dkdc-links -c` to edit it.
+Configuration lives at `$HOME/.config/dkdc/links/config.toml`. Example:
 
 ```toml
 [aliases]
@@ -67,11 +42,36 @@ gh = "github"
 li = "linkedin"
 
 [links]
-github = "https://github.com/lostmygithubaccount"
-linkedin = "https://linkedin.com/in/codydkdc"
+github = "https://github.com"
+linkedin = "https://linkedin.com"
 
 [groups]
 social = ["github", "linkedin"]
 ```
+
+Open links by name or alias:
+
+```bash
+# Open a link
+dkdc-links github
+
+# Open multiple links
+dkdc-links gh linkedin
+
+# Open a group
+dkdc-links social
+```
+
+### Options
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--config` | `-c` | Open configuration file in `$EDITOR` |
+| `--app` | `-a` | Open desktop app (requires `app` feature) |
+| `--webapp` | `-w` | Open the web app in browser (requires `webapp` feature) |
+| `--help` | `-h` | Print help |
+| `--version` | `-V` | Print version |
+
+## Configuration
 
 Aliases map to links, links map to URLs, and groups expand to multiple aliases or links.
