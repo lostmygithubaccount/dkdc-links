@@ -6,9 +6,9 @@ echo "Checking Rust formatting..."
 cargo fmt --manifest-path dkdc-links/Cargo.toml -- --check
 
 echo "Running clippy..."
-cargo clippy --manifest-path dkdc-links/Cargo.toml -- -D warnings
+cargo clippy --manifest-path dkdc-links/Cargo.toml --features app,webapp -- -D warnings
 
 echo "Running Rust tests..."
-cargo test --manifest-path dkdc-links/Cargo.toml
+cargo test --manifest-path dkdc-links/Cargo.toml --features app,webapp
 
 echo "Rust checks passed!"

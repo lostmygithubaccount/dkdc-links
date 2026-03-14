@@ -36,12 +36,13 @@ where
 {
     let args = Args::parse_from(args);
 
+    let storage = TomlStorage::with_default_path()?;
+
     #[cfg(feature = "app")]
     if args.app {
-        return crate::app::run().map_err(|e| anyhow::anyhow!("{e}"));
+        storage.init()?;
+        return crate::app::run(Box::new(storage)).map_err(|e| anyhow::anyhow!("{e}"));
     }
-
-    let storage = TomlStorage::with_default_path()?;
 
     #[cfg(feature = "webapp")]
     if args.webapp {

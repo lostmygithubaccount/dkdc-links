@@ -368,7 +368,7 @@ fn alias_row(alias: &str, target: &str, config: &Config) -> String {
     let a = escape(alias);
     let t = escape(target);
     let resolved = resolve_url(alias, config);
-    let name_cell = if let Some(ref url) = resolved {
+    let name_cell = if let Some(url) = resolved {
         format!(
             r##"<a href="{u}" target="_blank" rel="noopener" title="{u}">{a}</a>"##,
             u = escape(url)
@@ -718,18 +718,17 @@ async fn edit_link(
     let new_name = form.get("new_name").filter(|s| !s.is_empty());
     let new_url = form.get("new_url").filter(|s| !s.is_empty());
 
-    if let Some(new_url) = new_url {
-        if let Some(url) = config.links.get_mut(&name) {
-            *url = new_url.clone();
-        }
+    if let Some(new_url) = new_url
+        && let Some(url) = config.links.get_mut(&name)
+    {
+        *url = new_url.clone();
     }
 
-    if let Some(new_name) = new_name {
-        if new_name != &name {
-            if let Err(e) = config.rename_link(&name, new_name) {
-                return content_err(&state, &e.to_string());
-            }
-        }
+    if let Some(new_name) = new_name
+        && new_name != &name
+        && let Err(e) = config.rename_link(&name, new_name)
+    {
+        return content_err(&state, &e.to_string());
     }
 
     state.save_config(&config);
@@ -757,12 +756,11 @@ async fn edit_alias(
         }
     }
 
-    if let Some(new_name) = new_name {
-        if new_name != &name {
-            if let Err(e) = config.rename_alias(&name, new_name) {
-                return content_err(&state, &e.to_string());
-            }
-        }
+    if let Some(new_name) = new_name
+        && new_name != &name
+        && let Err(e) = config.rename_alias(&name, new_name)
+    {
+        return content_err(&state, &e.to_string());
     }
 
     state.save_config(&config);
@@ -802,12 +800,11 @@ async fn edit_group(
         }
     }
 
-    if let Some(new_name) = new_name {
-        if new_name != &name {
-            if let Some(entries) = config.groups.remove(&name) {
-                config.groups.insert(new_name.clone(), entries);
-            }
-        }
+    if let Some(new_name) = new_name
+        && new_name != &name
+        && let Some(entries) = config.groups.remove(&name)
+    {
+        config.groups.insert(new_name.clone(), entries);
     }
 
     state.save_config(&config);
