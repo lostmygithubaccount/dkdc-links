@@ -1,9 +1,9 @@
 //! Embedded HTMX webapp for dkdc-links
 
-use axum::Router;
 use axum::extract::{Path, Query, State};
 use axum::response::Html;
 use axum::routing::{get, post};
+use axum::Router;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
@@ -718,17 +718,18 @@ async fn edit_link(
     let new_name = form.get("new_name").filter(|s| !s.is_empty());
     let new_url = form.get("new_url").filter(|s| !s.is_empty());
 
-    if let Some(new_url) = new_url
-        && let Some(url) = config.links.get_mut(&name)
-    {
-        *url = new_url.clone();
+    if let Some(new_url) = new_url {
+        if let Some(url) = config.links.get_mut(&name) {
+            *url = new_url.clone();
+        }
     }
 
-    if let Some(new_name) = new_name
-        && new_name != &name
-        && let Err(e) = config.rename_link(&name, new_name)
-    {
-        return content_err(&state, &e.to_string());
+    if let Some(new_name) = new_name {
+        if new_name != &name {
+            if let Err(e) = config.rename_link(&name, new_name) {
+                return content_err(&state, &e.to_string());
+            }
+        }
     }
 
     state.save_config(&config);
@@ -756,11 +757,12 @@ async fn edit_alias(
         }
     }
 
-    if let Some(new_name) = new_name
-        && new_name != &name
-        && let Err(e) = config.rename_alias(&name, new_name)
-    {
-        return content_err(&state, &e.to_string());
+    if let Some(new_name) = new_name {
+        if new_name != &name {
+            if let Err(e) = config.rename_alias(&name, new_name) {
+                return content_err(&state, &e.to_string());
+            }
+        }
     }
 
     state.save_config(&config);
@@ -800,11 +802,12 @@ async fn edit_group(
         }
     }
 
-    if let Some(new_name) = new_name
-        && new_name != &name
-        && let Some(entries) = config.groups.remove(&name)
-    {
-        config.groups.insert(new_name.clone(), entries);
+    if let Some(new_name) = new_name {
+        if new_name != &name {
+            if let Some(entries) = config.groups.remove(&name) {
+                config.groups.insert(new_name.clone(), entries);
+            }
+        }
     }
 
     state.save_config(&config);

@@ -1,16 +1,14 @@
 [workspace]
 
 [profile.release]
-# fat LTO (lto = true) causes SIGSEGV in nightly rustc with iced's dependency tree.
-# thin LTO gives ~95% of the size/perf benefit without the compiler crash.
-lto = "thin"
+lto = true
 strip = true
 codegen-units = 1
 
 [package]
 name = "dkdc-links"
-version = "4.1.0"
-edition = "2024"
+version = "4.1.1"
+edition = "2021"
 authors = ["Cody <cody@dkdc.dev>"]
 description = "Bookmarks in your terminal"
 repository = "https://github.com/lostmygithubaccount/dkdc-links"

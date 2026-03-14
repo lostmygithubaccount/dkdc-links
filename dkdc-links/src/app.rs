@@ -1,8 +1,8 @@
 //! Desktop app for dkdc-links
 
 use iced::widget::{
-    Column, button, center, checkbox, column, container, mouse_area, row, scrollable, text,
-    text_input,
+    button, center, checkbox, column, container, mouse_area, row, scrollable, text, text_input,
+    Column,
 };
 use iced::{Element, Length, Size, Theme};
 use std::collections::HashSet;
@@ -455,11 +455,11 @@ impl Links {
     fn apply_edit(&mut self, kind: ItemKind, name: &str, field: &str, value: &str) {
         match (kind, field) {
             (ItemKind::Link, "name") => {
-                if value != name
-                    && let Err(e) = self.config.rename_link(name, value)
-                {
-                    self.error = Some(e.to_string());
-                    return;
+                if value != name {
+                    if let Err(e) = self.config.rename_link(name, value) {
+                        self.error = Some(e.to_string());
+                        return;
+                    }
                 }
             }
             (ItemKind::Link, "value") => {
@@ -468,11 +468,11 @@ impl Links {
                 }
             }
             (ItemKind::Alias, "name") => {
-                if value != name
-                    && let Err(e) = self.config.rename_alias(name, value)
-                {
-                    self.error = Some(e.to_string());
-                    return;
+                if value != name {
+                    if let Err(e) = self.config.rename_alias(name, value) {
+                        self.error = Some(e.to_string());
+                        return;
+                    }
                 }
             }
             (ItemKind::Alias, "value") => {
@@ -485,10 +485,10 @@ impl Links {
                 }
             }
             (ItemKind::Group, "name") => {
-                if value != name
-                    && let Some(entries) = self.config.groups.remove(name)
-                {
-                    self.config.groups.insert(value.to_string(), entries);
+                if value != name {
+                    if let Some(entries) = self.config.groups.remove(name) {
+                        self.config.groups.insert(value.to_string(), entries);
+                    }
                 }
             }
             (ItemKind::Group, "value") => {
