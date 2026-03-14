@@ -1,7 +1,8 @@
 //! Desktop app for dkdc-links
 
 use iced::widget::{
-    Column, button, center, checkbox, column, container, row, scrollable, text, text_input,
+    Column, button, center, checkbox, column, container, mouse_area, row, scrollable, text,
+    text_input,
 };
 use iced::{Element, Length, Size, Theme};
 use std::collections::HashSet;
@@ -54,12 +55,13 @@ enum ItemKind {
     Group,
 }
 
+/// Row-level edit state: both name and value are editable at once.
 #[derive(Debug, Clone)]
-struct EditState {
+struct RowEditState {
     kind: ItemKind,
-    name: String,
-    field: &'static str,
-    value: String,
+    original_name: String,
+    edit_name: String,
+    edit_value: String,
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +75,15 @@ struct ConfirmState {
 enum ConfirmAction {
     DeleteSingle(ItemKind, String),
     DeleteBulk(Vec<(ItemKind, String)>),
+}
+
+/// Right-click context menu state
+#[derive(Debug, Clone)]
+struct ContextMenuState {
+    kind: ItemKind,
+    name: String,
+    /// Resolved URLs for this item
+    urls: Vec<String>,
 }
 
 // -- Messages ----------------------------------------------------------------
@@ -99,13 +110,19 @@ enum Message {
     DeleteSelected,
 
     RequestDelete(ItemKind, String),
-    StartEdit(ItemKind, String, &'static str, String),
-    EditChanged(String),
-    CommitEdit,
-    #[expect(dead_code)]
+    /// Enter row edit mode: (kind, name, current_name, current_value)
+    StartRowEdit(ItemKind, String, String, String),
+    EditNameChanged(String),
+    EditValueChanged(String),
+    SaveEdit,
     CancelEdit,
 
     OpenUrl(String),
+    OpenUrls(Vec<String>),
+    CopyUrl(String),
+
+    /// Show right-click context menu for a row
+    ShowContextMenu(ItemKind, String, Vec<String>),
 
     ConfirmYes,
     ConfirmNo,
@@ -131,7 +148,8 @@ struct Links {
     add_group_entries: String,
 
     selected: HashSet<(ItemKind, String)>,
-    editing: Option<EditState>,
+    editing: Option<RowEditState>,
+    context_menu: Option<ContextMenuState>,
     confirm: Option<ConfirmState>,
     error: Option<String>,
 }
@@ -154,6 +172,7 @@ impl Links {
                 add_group_entries: String::new(),
                 selected: HashSet::new(),
                 editing: None,
+                context_menu: None,
                 confirm: None,
                 error: None,
             },
@@ -163,6 +182,22 @@ impl Links {
 
     fn save(&self) {
         let _ = self.storage.save(&self.config);
+    }
+
+    /// Save the current row edit and clear edit state.
+    fn save_row_edit(&mut self) {
+        if let Some(edit) = self.editing.take() {
+            let name = edit.edit_name.trim().to_string();
+            let value = edit.edit_value.trim().to_string();
+            if name.is_empty() || value.is_empty() {
+                return;
+            }
+            // Apply value change first, then name change (rename cascades)
+            self.apply_edit(edit.kind, &edit.original_name, "value", &value);
+            if name != edit.original_name {
+                self.apply_edit(edit.kind, &edit.original_name, "name", &name);
+            }
+        }
     }
 
     fn resolve_url<'a>(&'a self, name: &str) -> Option<&'a str> {
@@ -183,8 +218,16 @@ impl Links {
 
     fn update(&mut self, message: Message) -> iced::Task<Message> {
         match message {
-            Message::TabSelected(tab) => self.tab = tab,
-            Message::SearchChanged(s) => self.search = s,
+            Message::TabSelected(tab) => {
+                self.save_row_edit();
+                self.context_menu = None;
+                self.tab = tab;
+            }
+            Message::SearchChanged(s) => {
+                self.save_row_edit();
+                self.context_menu = None;
+                self.search = s;
+            }
             Message::SortBy(field) => {
                 self.sort = if self.sort == field {
                     if field == SortField::Name {
@@ -324,33 +367,48 @@ impl Links {
                     action: ConfirmAction::DeleteSingle(kind, name),
                 });
             }
-            Message::StartEdit(kind, name, field, value) => {
-                self.editing = Some(EditState {
+            Message::StartRowEdit(kind, original_name, current_name, current_value) => {
+                self.save_row_edit();
+                self.context_menu = None;
+                self.editing = Some(RowEditState {
                     kind,
-                    name,
-                    field,
-                    value,
+                    original_name,
+                    edit_name: current_name,
+                    edit_value: current_value,
                 });
             }
-            Message::EditChanged(s) => {
+            Message::EditNameChanged(s) => {
                 if let Some(ref mut edit) = self.editing {
-                    edit.value = s;
+                    edit.edit_name = s;
                 }
             }
-            Message::CommitEdit => {
-                if let Some(edit) = self.editing.take() {
-                    let val = edit.value.trim().to_string();
-                    if !val.is_empty() {
-                        self.apply_edit(edit.kind, &edit.name, edit.field, &val);
-                    }
+            Message::EditValueChanged(s) => {
+                if let Some(ref mut edit) = self.editing {
+                    edit.edit_value = s;
                 }
+            }
+            Message::SaveEdit => {
+                self.save_row_edit();
             }
             Message::CancelEdit => {
                 self.editing = None;
             }
-
             Message::OpenUrl(url) => {
+                self.context_menu = None;
                 let _ = open::that(&url);
+            }
+            Message::OpenUrls(urls) => {
+                self.context_menu = None;
+                for url in &urls {
+                    let _ = open::that(url);
+                }
+            }
+            Message::CopyUrl(url) => {
+                self.context_menu = None;
+                return iced::clipboard::write(url);
+            }
+            Message::ShowContextMenu(kind, name, urls) => {
+                self.context_menu = Some(ContextMenuState { kind, name, urls });
             }
 
             Message::ConfirmYes => {
@@ -404,7 +462,7 @@ impl Links {
                     return;
                 }
             }
-            (ItemKind::Link, "url") => {
+            (ItemKind::Link, "value") => {
                 if let Some(url) = self.config.links.get_mut(name) {
                     *url = value.to_string();
                 }
@@ -417,7 +475,7 @@ impl Links {
                     return;
                 }
             }
-            (ItemKind::Alias, "target") => {
+            (ItemKind::Alias, "value") => {
                 if !self.config.links.contains_key(value) {
                     self.error = Some(format!("alias target '{value}' does not exist in links"));
                     return;
@@ -433,7 +491,7 @@ impl Links {
                     self.config.groups.insert(value.to_string(), entries);
                 }
             }
-            (ItemKind::Group, "entries") => {
+            (ItemKind::Group, "value") => {
                 let entries: Vec<String> = value
                     .split(',')
                     .map(|s| s.trim().to_string())
@@ -497,8 +555,12 @@ impl Links {
         content = content.push(
             column![
                 text("Bookmarks").size(24).color(colors::TEXT),
-                iced::widget::rich_text::<(), Message, _, _>([
-                    iced::widget::span("dkdc-links: bookmarks in your ")
+                iced::widget::rich_text::<String, Message, _, _>([
+                    iced::widget::span("dkdc-links")
+                        .size(13)
+                        .color(colors::PURPLE)
+                        .link("https://dkdc.io/links/".to_string()),
+                    iced::widget::span(": bookmarks in your ")
                         .size(13)
                         .color(colors::TEXT_DIM),
                     iced::widget::span("terminal")
@@ -506,7 +568,8 @@ impl Links {
                         .color(colors::TEXT_DIM)
                         .strikethrough(true),
                     iced::widget::span(" app").size(13).color(colors::TEXT_DIM),
-                ]),
+                ])
+                .on_link_click(Message::OpenUrl),
             ]
             .spacing(4),
         );
@@ -549,16 +612,18 @@ impl Links {
         .width(Length::Fill)
         .height(Length::Fill);
 
+        let bg_style = |_: &_| container::Style {
+            background: Some(iced::Background::Color(colors::BG_DARK)),
+            ..Default::default()
+        };
+
         if let Some(ref confirm) = self.confirm {
             let overlay = self.view_confirm_modal(confirm);
             iced::widget::stack![
                 container(body)
                     .width(Length::Fill)
                     .height(Length::Fill)
-                    .style(|_| container::Style {
-                        background: Some(iced::Background::Color(colors::BG_DARK)),
-                        ..Default::default()
-                    }),
+                    .style(bg_style),
                 overlay,
             ]
             .into()
@@ -566,10 +631,7 @@ impl Links {
             container(body)
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .style(|_| container::Style {
-                    background: Some(iced::Background::Color(colors::BG_DARK)),
-                    ..Default::default()
-                })
+                .style(bg_style)
                 .into()
         }
     }
@@ -876,7 +938,7 @@ impl Links {
             container(select_all).width(28),
             container(name_header).width(130),
             container(value_header).width(Length::Fill),
-            container(text("").size(11)).width(60),
+            container(text("").size(11)).width(120),
         ]
         .spacing(8)
         .padding([6, 8])
@@ -884,9 +946,49 @@ impl Links {
         .into()
     }
 
-    fn view_link_row(&self, name: &str, url: &str) -> Element<'_, Message> {
-        let is_selected = self.selected.contains(&(ItemKind::Link, name.to_string()));
+    /// Resolve all URLs for an item (for context menu).
+    fn resolve_item_urls(&self, kind: ItemKind, name: &str) -> Vec<String> {
+        match kind {
+            ItemKind::Link => self
+                .config
+                .links
+                .get(name)
+                .map(|u| vec![u.clone()])
+                .unwrap_or_default(),
+            ItemKind::Alias => self
+                .resolve_url(name)
+                .map(|u| vec![u.to_string()])
+                .unwrap_or_default(),
+            ItemKind::Group => self
+                .config
+                .groups
+                .get(name)
+                .map(|entries| {
+                    entries
+                        .iter()
+                        .filter_map(|e| self.resolve_url(e).map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        }
+    }
 
+    /// Check if context menu is showing for a given row.
+    fn has_context_menu(&self, kind: ItemKind, name: &str) -> bool {
+        self.context_menu
+            .as_ref()
+            .is_some_and(|c| c.kind == kind && c.name == name)
+    }
+
+    /// Check if a row is currently being edited.
+    fn is_editing(&self, kind: ItemKind, name: &str) -> bool {
+        self.editing
+            .as_ref()
+            .is_some_and(|e| e.kind == kind && e.original_name == name)
+    }
+
+    fn view_link_row<'a>(&'a self, name: &'a str, url: &'a str) -> Element<'a, Message> {
+        let is_selected = self.selected.contains(&(ItemKind::Link, name.to_string()));
         let cb = checkbox(is_selected)
             .on_toggle({
                 let name = name.to_string();
@@ -895,46 +997,49 @@ impl Links {
             .size(14)
             .style(|_, _| checkbox_style());
 
-        let name_cell = self.view_editable_cell(
-            ItemKind::Link,
-            name,
-            "name",
-            name.to_string(),
-            colors::PURPLE,
-            Some(url.to_string()),
-        );
+        if self.is_editing(ItemKind::Link, name) {
+            let edit = self.editing.as_ref().unwrap();
+            return self.view_edit_row(cb.into(), &edit.edit_name, "name", &edit.edit_value, "url");
+        }
 
-        let url_cell = self.view_editable_cell(
-            ItemKind::Link,
-            name,
-            "url",
-            url.to_string(),
-            colors::CYAN,
-            None,
-        );
+        let name_cell = button(text(name).size(13).color(colors::PURPLE))
+            .on_press(Message::OpenUrl(url.to_string()))
+            .padding([2, 4])
+            .width(Length::Fill)
+            .style(|_, status| link_cell_style(status));
 
-        let delete_btn = button(text("delete").size(12).color(colors::RED))
-            .on_press(Message::RequestDelete(ItemKind::Link, name.to_string()))
-            .padding([2, 8])
-            .style(|_, _| danger_button_style());
+        let url_cell = button(text(url).size(13).color(colors::CYAN))
+            .on_press(Message::OpenUrl(url.to_string()))
+            .padding([2, 4])
+            .width(Length::Fill)
+            .style(|_, status| link_cell_style(status));
 
-        row![
+        let actions = self.view_row_actions_or_context(ItemKind::Link, name, url);
+
+        let r = row![
             container(cb).width(28),
-            container(name_cell).width(130),
-            container(url_cell).width(Length::Fill),
-            container(delete_btn).width(60),
+            container(name_cell).width(130).clip(true),
+            container(url_cell).width(Length::Fill).clip(true),
+            container(actions).width(120),
         ]
         .spacing(8)
         .padding([6, 8])
-        .align_y(iced::Alignment::Center)
-        .into()
+        .align_y(iced::Alignment::Center);
+
+        let urls = self.resolve_item_urls(ItemKind::Link, name);
+        mouse_area(r)
+            .on_right_press(Message::ShowContextMenu(
+                ItemKind::Link,
+                name.to_string(),
+                urls,
+            ))
+            .into()
     }
 
-    fn view_alias_row(&self, alias: &str, target: &str) -> Element<'_, Message> {
+    fn view_alias_row<'a>(&'a self, alias: &'a str, target: &'a str) -> Element<'a, Message> {
         let is_selected = self
             .selected
             .contains(&(ItemKind::Alias, alias.to_string()));
-
         let cb = checkbox(is_selected)
             .on_toggle({
                 let alias = alias.to_string();
@@ -943,46 +1048,73 @@ impl Links {
             .size(14)
             .style(|_, _| checkbox_style());
 
+        if self.is_editing(ItemKind::Alias, alias) {
+            let edit = self.editing.as_ref().unwrap();
+            return self.view_edit_row(
+                cb.into(),
+                &edit.edit_name,
+                "alias",
+                &edit.edit_value,
+                "target",
+            );
+        }
+
         let resolved_url = self.resolve_url(alias).map(String::from);
 
-        let name_cell = self.view_editable_cell(
-            ItemKind::Alias,
-            alias,
-            "name",
-            alias.to_string(),
-            colors::PURPLE,
-            resolved_url,
-        );
+        let name_cell: Element<'_, Message> = if let Some(url) = resolved_url {
+            button(text(alias).size(13).color(colors::PURPLE))
+                .on_press(Message::OpenUrl(url))
+                .padding([2, 4])
+                .width(Length::Fill)
+                .style(|_, status| link_cell_style(status))
+                .into()
+        } else {
+            container(text(alias).size(13).color(colors::PURPLE))
+                .padding([2, 4])
+                .width(Length::Fill)
+                .into()
+        };
 
-        let target_cell = self.view_editable_cell(
-            ItemKind::Alias,
-            alias,
-            "target",
-            target.to_string(),
-            colors::PURPLE_DIM,
-            None,
-        );
+        // Target is clickable if it resolves to a URL
+        let target_url = self.config.links.get(target).cloned();
+        let target_cell: Element<'_, Message> = if let Some(url) = target_url {
+            button(text(target).size(13).color(colors::PURPLE_DIM))
+                .on_press(Message::OpenUrl(url))
+                .padding([2, 4])
+                .width(Length::Fill)
+                .style(|_, status| link_cell_style(status))
+                .into()
+        } else {
+            container(text(target).size(13).color(colors::PURPLE_DIM))
+                .padding([2, 4])
+                .width(Length::Fill)
+                .into()
+        };
 
-        let delete_btn = button(text("delete").size(12).color(colors::RED))
-            .on_press(Message::RequestDelete(ItemKind::Alias, alias.to_string()))
-            .padding([2, 8])
-            .style(|_, _| danger_button_style());
+        let actions = self.view_row_actions_or_context(ItemKind::Alias, alias, target);
 
-        row![
+        let r = row![
             container(cb).width(28),
-            container(name_cell).width(130),
-            container(target_cell).width(Length::Fill),
-            container(delete_btn).width(60),
+            container(name_cell).width(130).clip(true),
+            container(target_cell).width(Length::Fill).clip(true),
+            container(actions).width(120),
         ]
         .spacing(8)
         .padding([6, 8])
-        .align_y(iced::Alignment::Center)
-        .into()
+        .align_y(iced::Alignment::Center);
+
+        let urls = self.resolve_item_urls(ItemKind::Alias, alias);
+        mouse_area(r)
+            .on_right_press(Message::ShowContextMenu(
+                ItemKind::Alias,
+                alias.to_string(),
+                urls,
+            ))
+            .into()
     }
 
-    fn view_group_row<'a>(&'a self, name: &'a str, entries: &[String]) -> Element<'a, Message> {
+    fn view_group_row<'a>(&'a self, name: &'a str, entries: &'a [String]) -> Element<'a, Message> {
         let is_selected = self.selected.contains(&(ItemKind::Group, name.to_string()));
-
         let cb = checkbox(is_selected)
             .on_toggle({
                 let name = name.to_string();
@@ -991,6 +1123,17 @@ impl Links {
             .size(14)
             .style(|_, _| checkbox_style());
 
+        if self.is_editing(ItemKind::Group, name) {
+            let edit = self.editing.as_ref().unwrap();
+            return self.view_edit_row(
+                cb.into(),
+                &edit.edit_name,
+                "group",
+                &edit.edit_value,
+                "entries",
+            );
+        }
+
         let urls: Vec<String> = entries
             .iter()
             .filter_map(|e| self.resolve_url(e).map(String::from))
@@ -998,34 +1141,112 @@ impl Links {
 
         let name_cell: Element<'_, Message> = if !urls.is_empty() {
             button(text(name).size(13).color(colors::PURPLE))
-                .on_press(Message::OpenUrl(urls[0].clone()))
-                .padding(0)
-                .style(|_, _| button::Style::default())
+                .on_press(Message::OpenUrls(urls))
+                .padding([2, 4])
+                .width(Length::Fill)
+                .style(|_, status| link_cell_style(status))
                 .into()
         } else {
-            text(name).size(13).color(colors::PURPLE).into()
+            container(text(name).size(13).color(colors::PURPLE))
+                .padding([2, 4])
+                .width(Length::Fill)
+                .into()
         };
 
-        let entries_str = entries.join(", ");
-        let entries_cell = self.view_editable_cell(
-            ItemKind::Group,
-            name,
-            "entries",
-            entries_str,
-            colors::PURPLE_DIM,
-            None,
-        );
+        // Each entry is clickable if it resolves to a URL
+        let mut entry_widgets: Vec<Element<'_, Message>> = Vec::new();
+        for (i, entry) in entries.iter().enumerate() {
+            if i > 0 {
+                entry_widgets.push(text(", ").size(13).color(colors::TEXT_DIM).into());
+            }
+            let url = self.resolve_url(entry).map(String::from);
+            if let Some(url) = url {
+                entry_widgets.push(
+                    button(text(entry.as_str()).size(13).color(colors::PURPLE_DIM))
+                        .on_press(Message::OpenUrl(url))
+                        .padding(0)
+                        .style(|_, status| link_cell_style(status))
+                        .into(),
+                );
+            } else {
+                entry_widgets.push(
+                    text(entry.as_str())
+                        .size(13)
+                        .color(colors::PURPLE_DIM)
+                        .into(),
+                );
+            }
+        }
+        let entries_cell = container(
+            row(entry_widgets)
+                .spacing(0)
+                .align_y(iced::Alignment::Center),
+        )
+        .padding([2, 4])
+        .width(Length::Fill);
 
-        let delete_btn = button(text("delete").size(12).color(colors::RED))
-            .on_press(Message::RequestDelete(ItemKind::Group, name.to_string()))
+        let actions = self.view_row_actions_or_context(ItemKind::Group, name, &entries.join(", "));
+
+        let r = row![
+            container(cb).width(28),
+            container(name_cell).width(130).clip(true),
+            container(entries_cell).width(Length::Fill).clip(true),
+            container(actions).width(120),
+        ]
+        .spacing(8)
+        .padding([6, 8])
+        .align_y(iced::Alignment::Center);
+
+        let urls = self.resolve_item_urls(ItemKind::Group, name);
+        mouse_area(r)
+            .on_right_press(Message::ShowContextMenu(
+                ItemKind::Group,
+                name.to_string(),
+                urls,
+            ))
+            .into()
+    }
+
+    /// A row in edit mode: two text inputs + save/cancel buttons.
+    fn view_edit_row<'a>(
+        &self,
+        cb: Element<'a, Message>,
+        edit_name: &str,
+        name_placeholder: &str,
+        edit_value: &str,
+        value_placeholder: &str,
+    ) -> Element<'a, Message> {
+        let name_input = text_input(name_placeholder, edit_name)
+            .on_input(Message::EditNameChanged)
+            .on_submit(Message::SaveEdit)
+            .size(13)
+            .width(Length::Fill)
+            .style(|_, status| edit_input_style(status));
+
+        let value_input = text_input(value_placeholder, edit_value)
+            .on_input(Message::EditValueChanged)
+            .on_submit(Message::SaveEdit)
+            .size(13)
+            .width(Length::Fill)
+            .style(|_, status| edit_input_style(status));
+
+        let save_btn = button(text("save").size(12).color(colors::PURPLE))
+            .on_press(Message::SaveEdit)
             .padding([2, 8])
-            .style(|_, _| danger_button_style());
+            .style(|_, _| add_button_style());
+
+        let cancel_btn = button(text("cancel").size(12).color(colors::TEXT_DIM))
+            .on_press(Message::CancelEdit)
+            .padding([2, 8])
+            .style(|_, _| default_button_style());
 
         row![
             container(cb).width(28),
-            container(name_cell).width(130),
-            container(entries_cell).width(Length::Fill),
-            container(delete_btn).width(60),
+            container(name_input).width(130),
+            container(value_input).width(Length::Fill),
+            row![save_btn, cancel_btn]
+                .spacing(4)
+                .align_y(iced::Alignment::Center),
         ]
         .spacing(8)
         .padding([6, 8])
@@ -1033,51 +1254,62 @@ impl Links {
         .into()
     }
 
-    fn view_editable_cell(
+    /// Row actions: shows context menu (open/copy) if active, otherwise edit/delete.
+    fn view_row_actions_or_context(
         &self,
         kind: ItemKind,
-        item_name: &str,
-        field: &'static str,
-        display_value: String,
-        color: iced::Color,
-        open_url: Option<String>,
+        name: &str,
+        current_value: &str,
     ) -> Element<'_, Message> {
-        // Check if this cell is being edited
-        if let Some(ref edit) = self.editing
-            && edit.kind == kind
-            && edit.name == item_name
-            && edit.field == field
-        {
-            return text_input("", &edit.value)
-                .on_input(Message::EditChanged)
-                .on_submit(Message::CommitEdit)
-                .size(13)
-                .width(Length::Fill)
-                .style(|_, status| edit_input_style(status))
+        if self.has_context_menu(kind, name) {
+            let ctx = self.context_menu.as_ref().unwrap();
+            let urls = &ctx.urls;
+
+            if urls.is_empty() {
+                return text("no links").size(12).color(colors::TEXT_DIM).into();
+            }
+
+            let open_msg = if urls.len() == 1 {
+                Message::OpenUrl(urls[0].clone())
+            } else {
+                Message::OpenUrls(urls.clone())
+            };
+            let copy_text = urls.join("\n");
+
+            let open_btn = button(text("open").size(12).color(colors::CYAN))
+                .on_press(open_msg)
+                .padding([2, 8])
+                .style(|_, _| context_button_style());
+
+            let copy_btn = button(text("copy").size(12).color(colors::CYAN))
+                .on_press(Message::CopyUrl(copy_text))
+                .padding([2, 8])
+                .style(|_, _| context_button_style());
+
+            return row![open_btn, copy_btn]
+                .spacing(4)
+                .align_y(iced::Alignment::Center)
                 .into();
         }
 
-        // Normal display - clickable to edit
-        let display: Element<'_, Message> = if let Some(url) = open_url {
-            button(text(display_value.clone()).size(13).color(color))
-                .on_press(Message::OpenUrl(url))
-                .padding(0)
-                .style(|_, _| button::Style::default())
-                .into()
-        } else {
-            text(display_value.clone()).size(13).color(color).into()
-        };
-
-        button(display)
-            .on_press(Message::StartEdit(
+        let edit_btn = button(text("edit").size(12).color(colors::TEXT))
+            .on_press(Message::StartRowEdit(
                 kind,
-                item_name.to_string(),
-                field,
-                display_value,
+                name.to_string(),
+                name.to_string(),
+                current_value.to_string(),
             ))
-            .padding([2, 4])
-            .width(Length::Fill)
-            .style(|_, status| editable_cell_style(status))
+            .padding([2, 8])
+            .style(|_, _| default_button_style());
+
+        let delete_btn = button(text("delete").size(12).color(colors::RED))
+            .on_press(Message::RequestDelete(kind, name.to_string()))
+            .padding([2, 8])
+            .style(|_, _| danger_button_style());
+
+        row![edit_btn, delete_btn]
+            .spacing(4)
+            .align_y(iced::Alignment::Center)
             .into()
     }
 
@@ -1266,7 +1498,20 @@ fn checkbox_style() -> checkbox::Style {
     }
 }
 
-fn editable_cell_style(status: button::Status) -> button::Style {
+fn context_button_style() -> button::Style {
+    button::Style {
+        background: Some(iced::Background::Color(colors::BG_INPUT)),
+        border: iced::Border {
+            color: colors::CYAN,
+            width: 1.0,
+            radius: 4.0.into(),
+        },
+        text_color: colors::CYAN,
+        ..Default::default()
+    }
+}
+
+fn link_cell_style(status: button::Status) -> button::Style {
     button::Style {
         background: match status {
             button::Status::Hovered => Some(iced::Background::Color(colors::BG_HOVER)),
@@ -1276,7 +1521,7 @@ fn editable_cell_style(status: button::Status) -> button::Style {
             radius: 3.0.into(),
             ..Default::default()
         },
-        text_color: colors::TEXT,
+        text_color: colors::PURPLE,
         ..Default::default()
     }
 }
@@ -1292,9 +1537,38 @@ fn rule_style() -> iced::widget::rule::Style {
 
 // -- Entry point -------------------------------------------------------------
 
+fn load_icon() -> Option<iced::window::Icon> {
+    let png_bytes = include_bytes!("../assets/icon.png");
+    let decoder = png::Decoder::new(png_bytes.as_slice());
+    let mut reader = decoder.read_info().ok()?;
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).ok()?;
+    buf.truncate(info.buffer_size());
+
+    // Convert RGB to RGBA if needed
+    let rgba = if info.color_type == png::ColorType::Rgb {
+        let mut rgba = Vec::with_capacity(buf.len() / 3 * 4);
+        for chunk in buf.chunks(3) {
+            rgba.extend_from_slice(chunk);
+            rgba.push(255);
+        }
+        rgba
+    } else {
+        buf
+    };
+
+    iced::window::icon::from_rgba(rgba, info.width, info.height).ok()
+}
+
 pub fn run(storage: Box<dyn Storage>) -> iced::Result {
     use std::cell::RefCell;
     let storage = RefCell::new(Some(storage));
+
+    let window_settings = iced::window::Settings {
+        icon: load_icon(),
+        ..Default::default()
+    };
+
     iced::application(
         move || {
             let s = storage
@@ -1309,6 +1583,7 @@ pub fn run(storage: Box<dyn Storage>) -> iced::Result {
     .title(Links::title)
     .theme(Links::theme)
     .antialiasing(true)
+    .window(window_settings)
     .window_size(Size::new(720.0, 800.0))
     .run()
 }

@@ -855,7 +855,7 @@ dependencies = [
 
 [[package]]
 name = "dkdc-links"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -863,6 +863,7 @@ dependencies = [
  "dirs",
  "iced",
  "open",
+ "png",
  "serde",
  "tokio",
  "toml",
@@ -870,7 +871,7 @@ dependencies = [
 
 [[package]]
 name = "dkdc-links-py"
-version = "4.0.0"
+version = "4.1.0"
 dependencies = [
  "dkdc-links",
  "pyo3",
