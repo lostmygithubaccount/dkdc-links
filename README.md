@@ -30,39 +30,46 @@ uvx dkdc-links
 
 ## Usage
 
-```
+```bash
 dkdc-links [OPTIONS] [LINKS]...
 ```
+
+### Configuration
 
 Configuration lives at `$HOME/.config/dkdc/links/config.toml`. Example:
 
 ```toml
-[aliases]
-gh = "github"
-li = "linkedin"
-
 [links]
 github = "https://github.com"
 linkedin = "https://linkedin.com"
+
+[aliases]
+gh = "github"
+li = "linkedin"
 
 [groups]
 social = ["github", "linkedin"]
 ```
 
-Open links by name or alias:
+Links map to URLs, aliases map to links, and groups map to a list of aliases or links.
+
+Use the `--config` or `--app` or `--webapp` option to edit the configuration file.
+
+### Open links
+
+Open links by name or alias or group:
 
 ```bash
-# Open a link
 dkdc-links github
-
-# Open multiple links
 dkdc-links gh linkedin
-
-# Open a group
 dkdc-links social
 ```
 
+You can input multiple links, aliases, or groups at once. They will be opened in the order they are provided.
+
 ### Options
+
+Available options:
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -72,6 +79,3 @@ dkdc-links social
 | `--help` | `-h` | Print help |
 | `--version` | `-V` | Print version |
 
-## Configuration
-
-Aliases map to links, links map to URLs, and groups expand to multiple aliases or links.

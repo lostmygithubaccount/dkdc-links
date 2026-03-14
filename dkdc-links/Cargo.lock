@@ -855,7 +855,7 @@ dependencies = [
 
 [[package]]
 name = "dkdc-links"
-version = "4.1.2"
+version = "4.1.4"
 dependencies = [
  "anyhow",
  "axum",
